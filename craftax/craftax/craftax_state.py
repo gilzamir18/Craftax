@@ -45,8 +45,8 @@ class EnvState:
     up_ladders: jnp.ndarray
     chests_opened: jnp.ndarray
     monsters_killed: jnp.ndarray
-
-    reward_tmp: float
+    
+    default_reward: float
 
     player_position: jnp.ndarray
     player_level: int

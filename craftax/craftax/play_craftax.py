@@ -184,7 +184,7 @@ def main(args):
             print(f"Drink: {env_state.player_drink}, Thirst: {env_state.player_thirst}")
             print(f"Energy: {env_state.player_energy}, Fatigue: {env_state.player_fatigue}")
             print(f"Mana: {env_state.player_mana}, Mana Recover: {env_state.player_recover_mana}")
-            print(f"Reward tmp {env_state.reward_tmp}")
+            print(f"Temperature: {env_state.player_temperature}, Temp Change: {env_state.player_temperature_th}")
             #if reward > 0.8:
             print(f"Reward: {reward}\n")
 
