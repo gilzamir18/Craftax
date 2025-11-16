@@ -3014,21 +3014,10 @@ def level_up_attributes(state, action, params):
 def craftax_step(rng, state, action, params, static_params):
     init_achievements = state.achievements
     init_health = state.player_health
-    init_food = state.player_food
-    init_drink = state.player_drink
-    init_energy = state.player_energy
-    init_temperature = state.player_energy
 
     # Interrupt action if sleeping or resting
     action = jax.lax.select(state.is_sleeping, Action.NOOP.value, action)
     action = jax.lax.select(state.is_resting, Action.NOOP.value, action)
-
-    new_temperature = jax.lax.select(action == Action.UP or action == Action.RIGHT or action == Action.LEFT or action == Action.DOWN, state.player_temperature + 1, state.player_temperature-1)
-    new_temperature = jax.lax.select(new_temperature > 20, 20, new_temperature)
-    new_temperature = jax.lax.select(new_temperature < 0, 0, new_temperature)
-    state = state.replace(
-        player_temperature = new_temperature
-    )
 
     # Change floor
     state = change_floor(state, action, params, static_params)
@@ -3081,11 +3070,13 @@ def craftax_step(rng, state, action, params, static_params):
 
     # Intrinsics
     state = update_player_intrinsics(state, action, static_params)
+
     # Cap inv
     state = clip_inventory_and_intrinsics(state, params)
 
     # Inventory achievements
     state = calculate_inventory_achievements(state)
+
     # Reward
     achievement_coefficients = ACHIEVEMENT_REWARD_MAP
     achievement_reward = (
@@ -3093,47 +3084,15 @@ def craftax_step(rng, state, action, params, static_params):
         * achievement_coefficients
     ).sum()
     health_reward = (state.player_health - init_health) * 0.1
-    default_reward = achievement_reward + health_reward
-    
-    a = jnp.abs(state.player_health - state.player_health_th) * 1.0/static_params.health_max
-    b = jnp.abs(init_health - state.player_health_th) * 1.0/static_params.health_max
-    u = jax.lax.select(state.player_health >= state.player_health_th, 1, 0)
-    v = jax.lax.select(a >= b, 1, 0)#v = 1 if a < b else 0
-    health_reward = u + (1 - u) * (1 - 3 * v)
-
-    a = jnp.abs(state.player_food - state.player_food_th) * 1.0/static_params.food_max
-    b = jnp.abs(init_food - state.player_food_th) * 1.0/static_params.food_max
-    u = jax.lax.select(state.player_food >= state.player_food_th, 1, 0)
-    v = jax.lax.select(a >= b, 1, 0)
-    food_reward = u + (1 -  u) * (1 - 3 * v)
-
-    a = jnp.abs(state.player_drink - state.player_drink_th) * 1.0/static_params.drink_max
-    b = jnp.abs(init_drink - state.player_drink_th) * 1/static_params.drink_max
-    u = jax.lax.select(state.player_drink >= state.player_drink_th, 1, 0)
-    v = jax.lax.select(a >= b, 1, 0)
-    drink_reward = u + (1 -  u) * (1 - 3 * v)
-
-    a = jnp.abs(state.player_energy - state.player_energy_th) * 1.0/static_params.energy_max
-    b = jnp.abs(init_energy - state.player_energy_th) * 1/static_params.energy_max
-    u = jax.lax.select(state.player_energy >= state.player_energy_th, 1, 0)
-    v = jax.lax.select(a >= b, 1, 0)
-    energy_reward = u + (1 -  u) * (1 - 3 * v)
-
-    a = jnp.abs(state.player_temperature - state.player_temperature_th)/20.0
-    b = jnp.abs(init_temperature - state.player_temperature_th)/20.0
-    u = jax.lax.select(state.player_temperature >= state.player_temperature_th, 1, 0)
-    v = jax.lax.select(a >= b, 1, 0)
-    temperature_reward = u + (1 -  u) * (1 - 3 * v)
-
-    reward = (health_reward + food_reward + drink_reward + energy_reward) * 0.05
+    reward = achievement_reward + health_reward
 
     rng, _rng = jax.random.split(rng)
 
-    state = state.replace (
+    state = state.replace(
         timestep=state.timestep + 1,
         light_level=calculate_light_level(state.timestep + 1, params),
         state_rng=_rng,
-        default_reward=default_reward,
+        default_reward=reward,
     )
 
     return state, reward
