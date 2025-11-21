@@ -1743,47 +1743,17 @@ def craftax_step(rng, state, action, params, static_params):
     #health_reward = (state.player_health - init_health) * 0.1
     #reward = achievement_reward + health_reward
 
-    a = jnp.abs(sHealth - state.player_uHealth_th)
-    b = jnp.abs(init_sHealth - state.player_uHealth_th)
-    u = jax.lax.select(state.player_sHealth >= state.player_uHealth_th, 1, 0)
-    v = jax.lax.select(a >= b, 1, 0)#v = 1 if a < b else 0
-    health_reward = u + (1 - u) * (1 - 3 * v)
+    Dtp1 = 100 * (sHealth - 0.9)*(sHealth - 0.9) + \
+           50 * (sFood - 0.8)*(sFood - 0.8) + \
+           50 * (sDrink - 0.8)*(sDrink - 0.8) + \
+           50 * (sEnergy - 0.5)*(sEnergy - 0.5)
     
-    survival_kernel = jax.lax.select(u == 1, 0.0, 1.0) 
-
-
-    a = jnp.abs(sFood - state.player_uFood_th)
-    b = jnp.abs(init_sFood - state.player_uFood_th)
-    u = jax.lax.select(state.player_sFood >= state.player_uFood_th, 1, 0)
-    v = jax.lax.select(a >= b, 1, 0)#v = 1 if a < b else 0
-    food_reward = u + (1 - u) * (1 - 3 * v)
-
-    a = jnp.abs(sDrink - state.player_uDrink_th)
-    b = jnp.abs(init_sDrink - state.player_uDrink_th)
-    u = jax.lax.select(state.player_sDrink >= state.player_uDrink_th, 1, 0)
-    v = jax.lax.select(a >= b, 1, 0)#v = 1 if a < b else 0
-    drink_reward = u + (1 - u) * (1 - 3 * v)
-
-    a = jnp.abs(sEnergy - state.player_uEnergy_th)
-    b = jnp.abs(init_sEnergy - state.player_uEnergy_th)
-    u = jax.lax.select(state.player_sEnergy >= state.player_uEnergy_th, 1, 0)
-    v = jax.lax.select(a >= b, 1, 0)#v = 1 if a < b else 0
-    energy_reward = u + (1 - u) * (1 - 3 * v)
-
-    a = jnp.abs(sAccomplishment - state.player_uAccomplishment_th)
-    b = jnp.abs(init_sAccomplishment - state.player_uAccomplishment_th)
-    u = jax.lax.select(state.player_sAccomplishment >= state.player_uAccomplishment_th, 1, 0)
-    v = jax.lax.select(a >= b, 1, 0)#v = 1 if a < b else 0
-    accomplishment_reward = u + (1 - u) * (1 - 3 * v)
-
-    reward = (
-        + health_reward * 0.9
-        + food_reward * 0.5
-        + drink_reward * 0.5
-        + energy_reward + 0.5
-        + accomplishment_reward * 0.9
-    )
-
+    Dt = 100 * (init_sHealth - 0.9)*(init_sHealth - 0.9) + \
+           50 * (init_sFood - 0.8)*(init_sFood - 0.8) + \
+           50 * (init_sDrink - 0.8)*(init_sDrink - 0.8) + \
+           50 * (init_sEnergy - 0.5)*(init_sEnergy - 0.5)
+        
+    reward = Dtp1 - Dt
 
     rng, _rng = jax.random.split(rng)
 
