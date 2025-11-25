@@ -1716,41 +1716,8 @@ def craftax_step(rng, state, action, params, static_params):
         state.achievements.astype(jnp.float32).sum()
         - init_achievements.astype(jnp.float32).sum()
     )
-    #health_reward = (state.player_health - init_health) * 0.1
-    #reward = achievement_reward + health_reward
-
-    a = jnp.abs(sHealth - state.player_uHealth_th)
-    b = jnp.abs(init_sHealth - state.player_uHealth_th)
-    u = jax.lax.select(state.player_sHealth >= state.player_uHealth_th, 1, 0)
-    v = jax.lax.select(a >= b, 1, 0)#v = 1 if a < b else 0
-    health_reward = u + (1 - u) * (1 - 3 * v)
-
-    a = jnp.abs(sFood - state.player_uFood_th)
-    b = jnp.abs(init_sFood - state.player_uFood_th)
-    u = jax.lax.select(state.player_sFood >= state.player_uFood_th, 1, 0)
-    v = jax.lax.select(a >= b, 1, 0)#v = 1 if a < b else 0
-    food_reward = u + (1 - u) * (1 - 3 * v)
-
-    a = jnp.abs(sDrink - state.player_uDrink_th)
-    b = jnp.abs(init_sDrink - state.player_uDrink_th)
-    u = jax.lax.select(state.player_sDrink >= state.player_uDrink_th, 1, 0)
-    v = jax.lax.select(a >= b, 1, 0)#v = 1 if a < b else 0
-    drink_reward = u + (1 - u) * (1 - 3 * v)
-
-    a = jnp.abs(sEnergy - state.player_uEnergy_th)
-    b = jnp.abs(init_sEnergy - state.player_uEnergy_th)
-    u = jax.lax.select(state.player_sEnergy >= state.player_uEnergy_th, 1, 0)
-    v = jax.lax.select(a >= b, 1, 0)#v = 1 if a < b else 0
-    energy_reward = u + (1 - u) * (1 - 3 * v)
-
-
-    reward = (
-        + health_reward * 0.9
-        + food_reward * 0.5
-        + drink_reward * 0.5
-        + energy_reward + 0.5
-    )
-
+    health_reward = (state.player_health - init_health) * 0.1
+    reward = achievement_reward + health_reward
 
     rng, _rng = jax.random.split(rng)
 
