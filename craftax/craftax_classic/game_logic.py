@@ -1746,14 +1746,16 @@ def craftax_step(rng, state, action, params, static_params):
     Dtp1 = 100 * (sHealth - 0.9)*(sHealth - 0.9) + \
            50 * (sFood - 0.8)*(sFood - 0.8) + \
            50 * (sDrink - 0.8)*(sDrink - 0.8) + \
-           50 * (sEnergy - 0.5)*(sEnergy - 0.5)
+           50 * (sEnergy - 0.5)*(sEnergy - 0.5) + \
+           50 * (sAccomplishment - 0.5)*(sAccomplishment - 0.5)
     
     Dt = 100 * (init_sHealth - 0.9)*(init_sHealth - 0.9) + \
            50 * (init_sFood - 0.8)*(init_sFood - 0.8) + \
            50 * (init_sDrink - 0.8)*(init_sDrink - 0.8) + \
-           50 * (init_sEnergy - 0.5)*(init_sEnergy - 0.5)
+           50 * (init_sEnergy - 0.5)*(init_sEnergy - 0.5) + \
+           50 * (init_sAccomplishment - 0.5)*(init_sAccomplishment - 0.5)
         
-    reward = Dtp1 - Dt
+    reward = Dt - Dtp1
 
     rng, _rng = jax.random.split(rng)
 
