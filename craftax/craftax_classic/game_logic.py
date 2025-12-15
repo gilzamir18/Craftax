@@ -1638,47 +1638,13 @@ def cap_inventory(state):
 
 
 def craftax_step(rng, state, action, params, static_params):
+    return myhomeostatic_step(rng, state, action, params, static_params)
+    #return yoshida_step(rng, state, action, params, static_params)
+
+def default_step(rng, state, action, params, static_params):
     init_achievements = state.achievements
     init_health = state.player_health
-    init_uHealth = state.player_uHealth
-    init_uFood = state.player_uFood
-    init_uDrink = state.player_uDrink
-    init_uEnergy = state.player_uEnergy
 
-    uHealth = jax.lax.select(is_game_over(state, params), 0.0, 0.95 * init_uHealth + 0.05 * state.player_health)
-    uHealth = jax.lax.select(uHealth >= 9.0, 9.0, uHealth)
-    uFood = 0.95 * init_uFood + 0.05 * state.player_food
-    uFood = jax.lax.select(uFood >= 9.0, 9.0, uFood)
-    uDrink = 0.95 * init_uDrink + 0.05 * state.player_drink
-    uDrink = jax.lax.select(uDrink >= 9.0, 9.0, uDrink)
-    uEnergy = 0.95 * init_uEnergy + 0.05 * state.player_energy
-    uEnergy = jax.lax.select(uEnergy >= 9.0, 9.0, uEnergy)
-
-    state = state.replace(
-        player_uHealth=uHealth,
-        player_uFood=uFood,
-        player_uDrink=uDrink,
-        player_uEnergy=uEnergy
-    )
-
-    init_sHealth = state.player_sHealth
-    init_sFood = state.player_sFood
-    init_sDrink = state.player_sDrink
-    init_sEnergy = state.player_sEnergy
-
-
-    sHealth = uHealth / 9.0
-    sFood = uFood / 9.0
-    sDrink = uDrink / 9.0
-    sEnergy = uEnergy / 9.0
-
-    state = state.replace(
-        player_sHealth=sHealth,
-        player_sFood=sFood,
-        player_sDrink=sDrink,
-        player_sEnergy=sEnergy
-    )
-    
     # Interrupt action if sleeping
     action = jax.lax.select(state.is_sleeping, Action.NOOP.value, action)
 
@@ -1718,6 +1684,280 @@ def craftax_step(rng, state, action, params, static_params):
     )
     health_reward = (state.player_health - init_health) * 0.1
     reward = achievement_reward + health_reward
+
+    rng, _rng = jax.random.split(rng)
+
+    state = state.replace(
+        timestep=state.timestep + 1,
+        light_level=calculate_light_level(state.timestep + 1, params),
+        state_rng=_rng,
+    )
+
+    return state, reward
+
+def yoshida_step(rng, state, action, params, static_params):
+    init_achievements = state.achievements
+    init_health = state.player_health
+    init_uHealth = state.player_uHealth
+    init_uFood = state.player_uFood
+    init_uDrink = state.player_uDrink
+    init_uEnergy = state.player_uEnergy
+    init_uAccomplishment = state.player_uAccomplishment
+    init_accomplishment = state.player_accomplishment
+
+
+    init_sHealth = state.player_sHealth
+    init_sFood = state.player_sFood
+    init_sDrink = state.player_sDrink
+    init_sEnergy = state.player_sEnergy
+    init_sAccomplishment = state.player_sAccomplishment
+    
+    ## END T
+    ## BEGIN T+1
+    # Interrupt action if sleeping
+    action = jax.lax.select(state.is_sleeping, Action.NOOP.value, action)
+
+    # Crafting
+    state = do_crafting(state, action)
+
+    # Interact (mining, attacking, eating plants, drinking water)
+    rng, _rng = jax.random.split(rng)
+    state = do_action(_rng, state, action, static_params)
+
+    # Placing
+    state = place_block(state, action, static_params)
+
+    # Movement
+    state = move_player(state, action)
+
+    # Mobs
+    rng, _rng = jax.random.split(rng)
+    state = update_mobs(_rng, state, params, static_params)
+
+    rng, _rng = jax.random.split(rng)
+    state = spawn_mobs(state, _rng, params, static_params)
+
+    # Plants
+    state = update_plants(state, static_params)
+
+    # Intrinsics
+    state = update_player_intrinsics(state, action)
+
+    # Cap inv
+    state = cap_inventory(state)
+
+    add_accomplisment = (
+        state.achievements.astype(jnp.float32).sum()
+        - init_achievements.astype(jnp.float32).sum()
+    )
+
+    #add_accomplisment = jax.lax.select(is_game_over(state, params), 0.0, add_accomplisment)
+    add_accomplisment = jax.lax.select(add_accomplisment == 0.0, -0.001, add_accomplisment)
+
+    new_accomplisment = state.player_accomplishment +  add_accomplisment
+    new_accomplisment = jax.lax.select(new_accomplisment < 0.0, 0.0, new_accomplisment)
+
+    state = state.replace(player_accomplishment=new_accomplisment)
+
+    ###################################### T+1 END
+
+    uHealth = jax.lax.select(state.player_health <= 0, 0.0, 0.95 * init_uHealth + 0.05 *jnp.float32(state.player_health))
+    uHealth = jax.lax.select(uHealth >= 9.0, 9.0, uHealth)
+    uFood = 0.95 * init_uFood + 0.05 *jnp.float32(state.player_food)
+    uFood = jax.lax.select(uFood >= 9.0, 9.0, uFood)
+    uDrink = 0.95 * init_uDrink + 0.05 *jnp.float32(state.player_drink)
+    uDrink = jax.lax.select(uDrink >= 9.0, 9.0, uDrink)
+    uEnergy = 0.95 * init_uEnergy + 0.05 *jnp.float32(state.player_energy)
+    uEnergy = jax.lax.select(uEnergy >= 9.0, 9.0, uEnergy)
+    uAccomplishment = 0.95 * init_uAccomplishment + 0.05 *jnp.float32(state.player_accomplishment)
+    uAccomplishment = jax.lax.select(uAccomplishment >= 9.0, 9.0, uAccomplishment)
+
+    state = state.replace(
+        player_uHealth=uHealth,
+        player_uFood=uFood,
+        player_uDrink=uDrink,
+        player_uEnergy=uEnergy,
+        player_uAccomplishment=uAccomplishment
+    )
+
+    sHealth = uHealth / 9.0
+    sFood = uFood / 9.0
+    sDrink = uDrink / 9.0
+    sEnergy = uEnergy / 9.0
+    sAccomplishment = uAccomplishment / 9.0
+
+    state = state.replace(
+        player_sHealth=sHealth,
+        player_sFood=sFood,
+        player_sDrink=sDrink,
+        player_sEnergy=sEnergy,
+        player_sAccomplishment=sAccomplishment
+    )
+
+    Dtp1 = 100 * (sHealth - 0.9)*(sHealth - 0.9) + \
+           50 * (sFood - 0.8)*(sFood - 0.8) + \
+           50 * (sDrink - 0.8)*(sDrink - 0.8) + \
+           50 * (sEnergy - 0.5)*(sEnergy - 0.5) + \
+           50 * (sAccomplishment - 0.5)*(sAccomplishment - 0.5)
+    
+    Dt = 100 * (init_sHealth - 0.9)*(init_sHealth - 0.9) + \
+           50 * (init_sFood - 0.8)*(init_sFood - 0.8) + \
+           50 * (init_sDrink - 0.8)*(init_sDrink - 0.8) + \
+           50 * (init_sEnergy - 0.5)*(init_sEnergy - 0.5) + \
+           50 * (init_sAccomplishment - 0.5)*(init_sAccomplishment - 0.5)
+
+    reward = Dt - Dtp1
+
+    rng, _rng = jax.random.split(rng)
+
+    state = state.replace(
+        timestep=state.timestep + 1,
+        light_level=calculate_light_level(state.timestep + 1, params),
+        state_rng=_rng,
+        default_reward=0.0,
+    )
+
+    return state, reward
+    
+def myhomeostatic_step(rng, state, action, params, static_params):
+    init_achievements = state.achievements
+    init_health = state.player_health
+    init_uHealth = state.player_uHealth
+    init_uFood = state.player_uFood
+    init_uDrink = state.player_uDrink
+    init_uEnergy = state.player_uEnergy
+    init_uAccomplishment = state.player_uAccomplishment
+    init_accomplishment = state.player_accomplishment
+
+    init_sHealth = state.player_sHealth
+    init_sFood = state.player_sFood
+    init_sDrink = state.player_sDrink
+    init_sEnergy = state.player_sEnergy
+    init_sAccomplishment = state.player_sAccomplishment
+    
+    ## END T
+    ## BEGIN T+1
+    # Interrupt action if sleeping
+    action = jax.lax.select(state.is_sleeping, Action.NOOP.value, action)
+
+    # Crafting
+    state = do_crafting(state, action)
+
+    # Interact (mining, attacking, eating plants, drinking water)
+    rng, _rng = jax.random.split(rng)
+    state = do_action(_rng, state, action, static_params)
+
+    # Placing
+    state = place_block(state, action, static_params)
+
+    # Movement
+    state = move_player(state, action)
+
+    # Mobs
+    rng, _rng = jax.random.split(rng)
+    state = update_mobs(_rng, state, params, static_params)
+
+    rng, _rng = jax.random.split(rng)
+    state = spawn_mobs(state, _rng, params, static_params)
+
+    # Plants
+    state = update_plants(state, static_params)
+
+    # Intrinsics
+    state = update_player_intrinsics(state, action)
+
+    # Cap inv
+    state = cap_inventory(state)
+
+    add_accomplisment = (
+        state.achievements.astype(jnp.float32).sum()
+        - init_achievements.astype(jnp.float32).sum()
+    )
+
+    #add_accomplisment = jax.lax.select(is_game_over(state, params), 0.0, add_accomplisment)
+    add_accomplisment = jax.lax.select(add_accomplisment == 0.0, -0.001, add_accomplisment)
+
+    new_accomplisment = state.player_accomplishment +  add_accomplisment
+    new_accomplisment = jax.lax.select(new_accomplisment < 0.0, 0.0, new_accomplisment)
+
+    state = state.replace(player_accomplishment=new_accomplisment)
+
+    ###################################### T+1 END
+
+    uHealth = jax.lax.select(state.player_health <= 0, 0.0, 0.95 * init_uHealth + 0.05 *jnp.float32(state.player_health))
+    uHealth = jax.lax.select(uHealth >= 9.0, 9.0, uHealth)
+    uFood = 0.95 * init_uFood + 0.05 *jnp.float32(state.player_food)
+    uFood = jax.lax.select(uFood >= 9.0, 9.0, uFood)
+    uDrink = 0.95 * init_uDrink + 0.05 *jnp.float32(state.player_drink)
+    uDrink = jax.lax.select(uDrink >= 9.0, 9.0, uDrink)
+    uEnergy = 0.95 * init_uEnergy + 0.05 *jnp.float32(state.player_energy)
+    uEnergy = jax.lax.select(uEnergy >= 9.0, 9.0, uEnergy)
+    uAccomplishment = 0.95 * init_uAccomplishment + 0.05 *jnp.float32(state.player_accomplishment)
+    uAccomplishment = jax.lax.select(uAccomplishment >= 9.0, 9.0, uAccomplishment)
+
+    state = state.replace(
+        player_uHealth=uHealth,
+        player_uFood=uFood,
+        player_uDrink=uDrink,
+        player_uEnergy=uEnergy,
+        player_uAccomplishment=uAccomplishment
+    )
+
+    sHealth = uHealth / 9.0
+    sFood = uFood / 9.0
+    sDrink = uDrink / 9.0
+    sEnergy = uEnergy / 9.0
+    sAccomplishment = uAccomplishment / 9.0
+
+    state = state.replace(
+        player_sHealth=sHealth,
+        player_sFood=sFood,
+        player_sDrink=sDrink,
+        player_sEnergy=sEnergy,
+        player_sAccomplishment=sAccomplishment
+    )
+
+    #health_reward = (state.player_health - init_health) * 0.1
+    #reward = achievement_reward + health_reward
+
+    a = jnp.abs(sHealth - state.player_uHealth_th)
+    b = jnp.abs(init_sHealth - state.player_uHealth_th)
+    u = jax.lax.select(state.player_sHealth >= state.player_uHealth_th, 1, 0)
+    v = jax.lax.select(a >= b, 1, 0)#v = 1 if a < b else 0
+    health_reward = u + (1 - u) * (1 - 3 * v)
+    
+
+    a = jnp.abs(sFood - state.player_uFood_th)
+    b = jnp.abs(init_sFood - state.player_uFood_th)
+    u = jax.lax.select(state.player_sFood >= state.player_uFood_th, 1, 0)
+    v = jax.lax.select(a >= b, 1, 0)#v = 1 if a < b else 0
+    food_reward = u + (1 - u) * (1 - 3 * v)
+
+    a = jnp.abs(sDrink - state.player_uDrink_th)
+    b = jnp.abs(init_sDrink - state.player_uDrink_th)
+    u = jax.lax.select(state.player_sDrink >= state.player_uDrink_th, 1, 0)
+    v = jax.lax.select(a >= b, 1, 0)#v = 1 if a < b else 0
+    drink_reward = u + (1 - u) * (1 - 3 * v)
+
+    a = jnp.abs(sEnergy - state.player_uEnergy_th)
+    b = jnp.abs(init_sEnergy - state.player_uEnergy_th)
+    u = jax.lax.select(state.player_sEnergy >= state.player_uEnergy_th, 1, 0)
+    v = jax.lax.select(a >= b, 1, 0)#v = 1 if a < b else 0
+    energy_reward = u + (1 - u) * (1 - 3 * v)
+
+    a = jnp.abs(sAccomplishment - state.player_uAccomplishment_th)
+    b = jnp.abs(init_sAccomplishment - state.player_uAccomplishment_th)
+    u = jax.lax.select(state.player_sAccomplishment >= state.player_uAccomplishment_th, 1, 0)
+    v = jax.lax.select(a >= b, 1, 0)#v = 1 if a < b else 0
+    accomplishment_reward = u + (1 - u) * (1 - 3 * v)
+
+    reward = 0.1 * (
+        + health_reward
+        + food_reward
+        + drink_reward
+        + energy_reward
+        + accomplishment_reward
+    )
 
     rng, _rng = jax.random.split(rng)
 
